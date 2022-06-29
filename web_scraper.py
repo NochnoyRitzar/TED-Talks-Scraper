@@ -1,15 +1,15 @@
 import requests
+import json
 # import library for faster scraping
 import cchardet
 from bs4 import BeautifulSoup, SoupStrainer
-
 from constants import TED_URL
 from db_connect import client
 
 # speed up program by filtering what to parse
 catalog_parse_only = SoupStrainer('div', id='browse-results')
-# page_parse_only = SoupStrainer('main', id='maincontent')
-page_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
+talk_page_parse_only = SoupStrainer('main', id='maincontent')
+talk_data_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
 
 # connect to 'talks_info' collection in 'TEDTalks' db
 collection = client['TEDTalks']['talks_info']
@@ -19,7 +19,6 @@ session = requests.Session()
 class WebScrappy:
 
     def __init__(self):
-        self.talk_count = 0
         self.last_page = WebScrappy.get_pages_count()
 
         self.start_scraping()
@@ -47,12 +46,12 @@ class WebScrappy:
 
         return catalog_page
 
-    def scrape_catalog_page_info(self, catalog_page):
+    @staticmethod
+    def scrape_catalog_page_info(catalog_page):
         """
-        Get info about title, speaker, date posted, talk duration and talk page url from catalog page
-        (https://www.ted.com/talks)
+        Scrape talks page url from catalog page
 
-        :return: Return list of talks info
+        :return: Return list of talks with their info
         :rtype: list
         """
         data = []
@@ -66,118 +65,92 @@ class WebScrappy:
             # get url of a TED talk page
             talk_page_url = TED_URL + talk_image.a['href']
 
-            talk_page_content = WebScrappy.get_talk_page(talk_page_url)
+            talk_page_data, talk_page_content = WebScrappy.get_talk_page(talk_page_url)
 
-            talk_page_info = WebScrappy.scrape_talk_page_info(talk_page_content)
+            talk_page_info = WebScrappy.scrape_talk_page_info(talk_page_data, talk_page_content)
 
-            # get talk duration and remove space in the beginning
-            talk_duration = talk_image.a.span.contents[1].get_text(strip=True)
-            title = talk_info.h4.find_next_sibling().a.get_text(strip=True)
-            date_posted = talk_info.div.span.span.get_text(strip=True)
-
-            data.append({'_id': self.talk_count,
-                         'title': title,
-                         'date': date_posted,
-                         'duration': talk_duration,
-                         'page_url': talk_page_url,
-                         **talk_page_info})
-
-            self.talk_count += 1
+            data.append({**talk_page_info,
+                         'page_url': talk_page_url})
 
         return data
 
     @staticmethod
     def get_talk_page(talk_page_url):
         """
+        Get talk's data and page html content
 
         :param talk_page_url: url of a talk's page
-        :return: Return page html content
+        :return: Return talk data and page html content
         """
         response = session.get(talk_page_url)
-        talk_page = BeautifulSoup(response.content, 'lxml', parse_only=page_parse_only)
-        return talk_page
+        # parse page section containing almost all talk data
+        talk_page_data = BeautifulSoup(response.content, 'lxml', parse_only=talk_data_parse_only)
+        # parse talk's page content
+        talk_page_content = BeautifulSoup(response.content, 'lxml', parse_only=talk_page_parse_only)
+        return talk_page_data, talk_page_content
 
     @staticmethod
-    def scrape_talk_page_info(talk_page):
+    def scrape_talk_page_info(talk_page_data, talk_page_content):
         """
-        Get views, likes count, topics, summary, related videos, speakers info from a talk's page
+        Get all information about a talk from it's data and html content
 
-        :param talk_page:
+        :param talk_page_data: talk data
+        :param talk_page_content: talk page html content
         :return: Talk information from it's page on TED
         :rtype: dict
         """
-        
+        talk_page_data = json.loads(talk_page_data.script.get_text())
 
+        page_right_side = talk_page_content.find('aside')
+        video_data = talk_page_data['props']['pageProps']['videoData']
+        player_data = json.loads(video_data['playerData'])
 
-        # page_right_side = talk_page.find('aside')
-        # # get topic list and iterate over it to get video topics
-        # talk_topics_list = page_right_side.find('ul')
-        # topics = [li.a.get_text(strip=True) for li in talk_topics_list.contents] if talk_topics_list else []
-        # # iterate over 'related videos' and extract information about them
-        # related_videos_section = page_right_side.find('div', attrs={'id': 'tabs--1--panel--0'}).select('a')
-        # related_videos = [WebScrappy.scrape_related_video_info(video) for video in related_videos_section]
-        #
-        # page_left_side = page_right_side.previous_sibling
-        # # find direct children of div element with class containing 'flex'
-        # talk_stats, talk_summary, _ = page_left_side.contents[1].find_all(attrs={'class': 'flex'}, recursive=False)
-        # views_and_event = talk_stats.div.div.get_text(strip=True).split(' ')
-        # event = views_and_event[-1]
-        # views = views_and_event[0].replace(',', '')
-        # views = None if not views.isdigit() else int(views)
-        # like_count = talk_stats.find('span').get_text(strip=True)[1:-1]
-        # summary = talk_summary.find(attrs={'class': 'text-sm mb-6'}).get_text(strip=True)
-        # # Talks can have either speakers or educators
-        # # Scrape info from section (speakers or educators) that exists in a page
-        # # If both sections don't exist set speakers list to empty
-        # speakers_section = page_left_side.select('div.mr-2.w-14 + div')
-        # educators_section = page_left_side.find_all('div', attrs={'class': 'mt-3 mb-6'})
-        # if speakers_section:
-        #     speakers_section = [div.contents for div in speakers_section]
-        #     speakers = [
-        #         {'name': div[0].get_text(),
-        #          'occupation': div[1].get_text()} for div in speakers_section
-        #     ]
-        # elif educators_section:
-        #     speakers = [
-        #         {'name': div.previous_sibling.find('div', attrs={'class': 'text-base'}).get_text(),
-        #          'occupation': 'Educator'} for div in educators_section
-        #     ]
-        # else:
-        #     speakers = []
-        #
-        # return {'views': views,
-        #         'event': event,
-        #         'like_count': like_count,
-        #         'summary': summary,
-        #         'topics': topics,
-        #         'speakers': speakers,
-        #         'related_videos': related_videos}
+        youtube_video_code = player_data.get('external').get('code')
+        ted_id = video_data['id']
+        title = video_data['title']
+        views = video_data['viewedCount']
+        duration = video_data['duration']
+        recorded_date = video_data['recordedOn']
+        published_date = video_data['publishedAt']
+        summary = video_data['description']
+        event = player_data['event']
+        likes = page_right_side.find_previous_sibling('div').select_one('i.icon-heart + span').get_text()[2:-1]
 
-    @staticmethod
-    def scrape_related_video_info(video):
-        """
-        Extract url, duration, views, date, title, speakers for related video
-
-        :param video: related video
-        :return: Information about related video
-        :rtype: dict
-        """
-        page_url = TED_URL + video['href']
-
-        video_info = video.div
-        duration = video_info.find('div', attrs={'class': 'text-xxs'}).get_text()
-        views_and_date, title, speakers = [
-            tag.get_text(strip=True) for tag in video_info.find('div', attrs={'class': 'ml-4'}).contents
+        topics_list = [
+            {'id': topic['id'], 'name': topic['name']} for topic in video_data['topics']['nodes']
         ]
-        views, date = views_and_date.split(' views | ')
+
+        related_videos_list = [video['id'] for video in video_data['relatedVideos']]
+
+        speakers_list = [
+            {
+                'name': ' '.join([speaker['firstname'], speaker['lastname']]).strip(),
+                'occupation': 'Educator' if event == 'TED-Ed' else speaker['description']
+            } for speaker in video_data['speakers']['nodes']
+        ]
+
+        languages_list = [
+            {
+                'name': language['languageName'],
+                'code': language['languageCode']
+            } for language in player_data['languages']
+        ]
 
         return {
-            'page_url': page_url,
+            '_id': ted_id,
+            'title': title,
             'duration': duration,
             'views': views,
-            'date': date,
-            'title': title,
-            'speakers': speakers
+            'likes': likes,
+            'summary': summary,
+            'event': event,
+            'recorded_date': recorded_date,
+            'published_date': published_date,
+            'topics': topics_list,
+            'speakers': speakers_list,
+            'subtitle_languages': languages_list,
+            'youtube_video_code': youtube_video_code,
+            'related_videos': related_videos_list
         }
 
     def start_scraping(self):
