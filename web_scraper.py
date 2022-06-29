@@ -3,7 +3,7 @@ import json
 # import library for faster scraping
 import cchardet
 from bs4 import BeautifulSoup, SoupStrainer
-from constants import TED_URL
+from constants import TED_URL, HEADERS
 from db_connect import client
 
 # speed up program by filtering what to parse
@@ -14,6 +14,7 @@ talk_data_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
 # connect to 'talks_info' collection in 'TEDTalks' db
 collection = client['TEDTalks']['talks_info']
 session = requests.Session()
+session.headers.update(HEADERS)
 
 
 class WebScrappy:
