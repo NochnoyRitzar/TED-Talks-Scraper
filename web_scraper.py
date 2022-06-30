@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup, SoupStrainer
 from urllib.parse import urlencode
 from constants import TED_URL, HEADERS, GRAPHQL_SHA_HASH
 from db_connect import client
-from utilities import logger, find_last_scraped_catalog_page
+from utilities import create_logger, find_last_scraped_catalog_page
 
 # speed up program by filtering what to parse
 catalog_parse_only = SoupStrainer('div', id='browse-results')
@@ -19,6 +19,7 @@ talk_data_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
 collection = client['TEDTalks']['talks_info']
 session = requests.Session()
 session.headers.update(HEADERS)
+logger = create_logger()
 
 
 class WebScrappy:

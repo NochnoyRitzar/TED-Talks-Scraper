@@ -5,13 +5,15 @@ import re
 from constants import LOG_FILE_NAME
 
 
-logger = logging.getLogger('WebScrappy')
-logger.setLevel(logging.INFO)
+def create_logger():
+    logger = logging.getLogger('WebScrappy')
+    logger.setLevel(logging.INFO)
+    log_format = logging.Formatter('%(levelname)s: %(asctime)s - %(message)s')
+    handler = logging.FileHandler(filename=LOG_FILE_NAME, encoding='utf-8', mode='w')
+    handler.setFormatter(log_format)
+    logger.addHandler(handler)
 
-log_format = logging.Formatter('%(levelname)s: %(asctime)s - %(message)s')
-handler = logging.FileHandler(filename=LOG_FILE_NAME, encoding='utf-8', mode='w')
-handler.setFormatter(log_format)
-logger.addHandler(handler)
+    return logger
 
 
 def find_last_scraped_catalog_page():
