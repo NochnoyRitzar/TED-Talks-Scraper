@@ -15,6 +15,7 @@ catalog_parse_only = SoupStrainer('div', id='browse-results')
 talk_page_parse_only = SoupStrainer('main', id='maincontent')
 talk_data_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
 
+last_scraped_page = find_last_scraped_catalog_page()
 # connect to 'talks_info' collection in 'TEDTalks' db
 collection = client['TEDTalks']['talks_info']
 session = requests.Session()
@@ -231,7 +232,7 @@ class WebScrappy:
     def start_scraping(self):
         print('Starting to web scrape')
         # iterate over all catalog pages
-        for page_number in range(find_last_scraped_catalog_page(), self.last_page + 1):
+        for page_number in range(last_scraped_page + 1, self.last_page + 1):
             catalog_page = WebScrappy.get_catalog_page(page_number)
             catalog_page_talks_info = self.scrape_catalog_page_info(catalog_page)
             print(f'Finished scraping page {page_number}/{self.last_page}')
