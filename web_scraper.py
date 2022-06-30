@@ -1,3 +1,5 @@
+import random
+import time
 import requests
 import json
 # import library for faster scraping
@@ -46,6 +48,7 @@ class WebScrappy:
 
     @staticmethod
     def get_catalog_page(page_number):
+        time.sleep(random.randint(10, 20))
         response = session.get(TED_URL + f'/talks?page={page_number}&sort=oldest')
         if response.status_code != 200:
             logger.error(response.content)
@@ -78,6 +81,7 @@ class WebScrappy:
 
             data.append({**talk_page_info,
                          'page_url': talk_page_url})
+            logger.info(f'Finished scraping talk - {talk_page_info.get("title")}')
 
         return data
 
@@ -89,6 +93,7 @@ class WebScrappy:
         :param talk_page_url: url of a talk's page
         :return: Return talk data and page html content
         """
+        time.sleep(random.randint(10, 20))
         response = session.get(talk_page_url)
         if response.status_code != 200:
             logger.error(response.content)
@@ -192,6 +197,7 @@ class WebScrappy:
         url = ''.join([TED_URL,
                        '/graphql?operationName=Transcript&',
                        urlencode(params).replace('+', '').replace('%27', '%22')])
+        time.sleep(random.randint(10, 20))
         response = session.get(url)
         if response.status_code != 200:
             logger.error(response.content)
