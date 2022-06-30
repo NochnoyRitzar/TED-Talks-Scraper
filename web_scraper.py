@@ -3,7 +3,8 @@ import json
 # import library for faster scraping
 import cchardet
 from bs4 import BeautifulSoup, SoupStrainer
-from constants import TED_URL, HEADERS
+from urllib.parse import urlencode
+from constants import TED_URL, HEADERS, GRAPHQL_SHA_HASH
 from db_connect import client
 
 # speed up program by filtering what to parse
@@ -64,7 +65,7 @@ class WebScrappy:
             talk_image, talk_info = div.find_all(recursive=False)
 
             # get url of a TED talk page
-            talk_page_url = TED_URL + talk_image.a['href']
+            talk_page_url = ''.join([TED_URL, talk_image.a['href']])
 
             talk_page_data, talk_page_content = WebScrappy.get_talk_page(talk_page_url)
 
@@ -108,6 +109,7 @@ class WebScrappy:
 
         youtube_video_code = player_data.get('external').get('code')
         ted_id = video_data['id']
+        talk_url = video_data['slug']
         title = video_data['title']
         views = video_data['viewedCount']
         duration = video_data['duration']
@@ -137,6 +139,9 @@ class WebScrappy:
             } for language in player_data['languages']
         ]
 
+        transcript_data = WebScrappy.get_transcript_data(talk_url)
+        transcript = WebScrappy.parse_talk_transcript(transcript_data)
+
         return {
             '_id': ted_id,
             'title': title,
@@ -151,8 +156,57 @@ class WebScrappy:
             'speakers': speakers_list,
             'subtitle_languages': languages_list,
             'youtube_video_code': youtube_video_code,
-            'related_videos': related_videos_list
+            'related_videos': related_videos_list,
+            'transcript': transcript
         }
+
+    @staticmethod
+    def get_transcript_data(talk_url):
+        """
+        Get transcript data from graphql request
+
+        :param talk_url: part of talk page url
+        :return: transcript data
+        """
+        # query parameters
+        params = {
+            "variables": {
+                "id": talk_url,
+                "language": "en"
+            },
+            "extensions": {
+                "persistedQuery": {
+                    "version": 1,
+                    "sha256Hash": GRAPHQL_SHA_HASH
+                }
+            }
+        }
+
+        url = ''.join([TED_URL,
+                       '/graphql?operationName=Transcript&',
+                       urlencode(params).replace('+', '').replace('%27', '%22')])
+        response = session.get(url)
+
+        return json.loads(response.content)
+
+    @staticmethod
+    def parse_talk_transcript(transcript_data):
+        """
+        Join transcript string into a single text
+
+        :param transcript_data: response content containing transcript data
+        :return: transcript of a talk
+        """
+        paragraphs_list = transcript_data['data']['translation']['paragraphs']
+        text_list = []
+        for paragraph in paragraphs_list:
+            cues = paragraph.get('cues')
+            paragraph_text = [cue.get('text').replace('\n', ' ') for cue in cues]
+            text_list.append(' '.join(paragraph_text))
+
+        transcript = ' '.join(text_list)
+
+        return transcript
 
     def start_scraping(self):
         print('Starting to web scrape')
