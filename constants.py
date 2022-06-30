@@ -2,9 +2,9 @@ TED_URL = 'https://www.ted.com'
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0',
            'Accept-Language': 'en-US,en;q=0.5',
-           'DNT': 1,
-           'Upgrade-Insecure-Requests': 1,
-           'Sec-GPC': 1,
+           'DNT': '1',
+           'Upgrade-Insecure-Requests': '1',
+           'Sec-GPC': '1',
            'Sec-Fetch-Dest': 'document',
            'Sec-Fetch-Mode': 'navigate'}
 
