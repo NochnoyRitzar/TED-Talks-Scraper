@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup, SoupStrainer
 from urllib.parse import urlencode
 from constants import TED_URL, HEADERS, GRAPHQL_SHA_HASH
 from db_connect import client
+from utilities import logger
 
 # speed up program by filtering what to parse
 catalog_parse_only = SoupStrainer('div', id='browse-results')
@@ -35,6 +36,8 @@ class WebScrappy:
         """
 
         response = requests.get(TED_URL + '/talks')
+        if response.status_code != 200:
+            logger.error(response.content)
         catalog_page = BeautifulSoup(response.content, 'lxml', parse_only=catalog_parse_only)
 
         gap_span = catalog_page.find('span', class_='pagination__item pagination__gap')
@@ -44,6 +47,8 @@ class WebScrappy:
     @staticmethod
     def get_catalog_page(page_number):
         response = session.get(TED_URL + f'/talks?page={page_number}&sort=oldest')
+        if response.status_code != 200:
+            logger.error(response.content)
         catalog_page = BeautifulSoup(response.content, 'lxml', parse_only=catalog_parse_only)
 
         return catalog_page
@@ -85,6 +90,8 @@ class WebScrappy:
         :return: Return talk data and page html content
         """
         response = session.get(talk_page_url)
+        if response.status_code != 200:
+            logger.error(response.content)
         # parse page section containing almost all talk data
         talk_page_data = BeautifulSoup(response.content, 'lxml', parse_only=talk_data_parse_only)
         # parse talk's page content
@@ -186,6 +193,8 @@ class WebScrappy:
                        '/graphql?operationName=Transcript&',
                        urlencode(params).replace('+', '').replace('%27', '%22')])
         response = session.get(url)
+        if response.status_code != 200:
+            logger.error(response.content)
 
         return json.loads(response.content)
 
@@ -212,14 +221,14 @@ class WebScrappy:
         print('Starting to web scrape')
         # iterate over all catalog pages
         for page_number in range(1, self.last_page + 1):
-            print(f'Started scraping page {page_number}/{self.last_page}')
             catalog_page = WebScrappy.get_catalog_page(page_number)
             catalog_page_talks_info = self.scrape_catalog_page_info(catalog_page)
             print(f'Finished scraping page {page_number}/{self.last_page}')
+            logger.info(f'Finished scraping page {page_number}/{self.last_page}')
             try:
                 collection.insert_many(catalog_page_talks_info)
             except Exception as ex:
-                print(ex)
+                logger.error(ex)
         print('Finished scraping! :)')
 
 
