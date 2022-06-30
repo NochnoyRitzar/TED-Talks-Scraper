@@ -10,3 +10,5 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Ge
 
 # sha hash to get talk transcript
 GRAPHQL_SHA_HASH = '18f8e983b84c734317ae9388c83a13bc98702921b141c2124b3ce4aeb6c48ef6'
+
+LOG_FILE_NAME = 'scraping.log'
