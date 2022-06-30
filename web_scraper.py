@@ -213,7 +213,11 @@ class WebScrappy:
         :param transcript_data: response content containing transcript data
         :return: transcript of a talk
         """
-        paragraphs_list = transcript_data['data']['translation']['paragraphs']
+        transcript_data = transcript_data['data'].get('translation')
+        # check if talk has no transcript
+        if not transcript_data:
+            return ''
+        paragraphs_list = transcript_data['paragraphs']
         text_list = []
         for paragraph in paragraphs_list:
             cues = paragraph.get('cues')
