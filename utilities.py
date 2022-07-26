@@ -31,7 +31,7 @@ def find_last_scraped_catalog_page():
                 if line.rstrip('\n')[-3:].isdigit():
                     last_scraped_catalog_page = re.search(r'(\d+)/\d+$', line).group(1)
 
-                    return int(last_scraped_catalog_page)
+                    return int(last_scraped_catalog_page) + 1
             # if line with info wasn't found
             else:
                 return 1

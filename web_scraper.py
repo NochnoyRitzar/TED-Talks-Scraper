@@ -6,6 +6,7 @@ import json
 import cchardet
 from bs4 import BeautifulSoup, SoupStrainer
 from urllib.parse import urlencode
+from pandas import read_csv
 from constants import TED_URL, HEADERS, GRAPHQL_SHA_HASH
 from db_connect import client
 from utilities import create_logger, find_last_scraped_catalog_page
@@ -21,6 +22,7 @@ collection = client['TEDTalks']['talks_info']
 session = requests.Session()
 session.headers.update(HEADERS)
 logger = create_logger()
+ua_list = read_csv('https://raw.githubusercontent.com/yusuzech/top-50-user-agents/master/user_agent.csv')
 
 
 class WebScrappy:
@@ -51,7 +53,9 @@ class WebScrappy:
     @staticmethod
     def get_catalog_page(page_number):
         time.sleep(random.randint(10, 20))
-        response = session.get(TED_URL + f'/talks?page={page_number}&sort=oldest')
+        url = TED_URL + f'/talks?page={page_number}&sort=oldest'
+        session.headers.update({'Referer': url})
+        response = session.get(url)
         if response.status_code != 200:
             logger.error(response.content)
         catalog_page = BeautifulSoup(response.content, 'lxml', parse_only=catalog_parse_only)
@@ -121,7 +125,7 @@ class WebScrappy:
         video_data = talk_page_data['props']['pageProps']['videoData']
         player_data = json.loads(video_data['playerData'])
 
-        youtube_video_code = player_data.get('external').get('code')
+        youtube_video_code = player_data.get('external', {}).get('code')
         ted_id = video_data['id']
         talk_url = video_data['slug']
         title = video_data['title']
@@ -233,6 +237,10 @@ class WebScrappy:
         print('Starting to web scrape')
         # iterate over all catalog pages
         for page_number in range(last_scraped_page + 1, self.last_page + 1):
+            # get random user-agent from list and update headers
+            headers = {'User-Agent': ua_list['User agent'].sample(1).iloc[0]}
+            session.headers.update(headers)
+
             catalog_page = WebScrappy.get_catalog_page(page_number)
             catalog_page_talks_info = self.scrape_catalog_page_info(catalog_page)
             print(f'Finished scraping page {page_number}/{self.last_page}')
