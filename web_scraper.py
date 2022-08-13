@@ -246,7 +246,8 @@ class WebScrappy:
             print(f'Finished scraping page {page_number}/{self.last_page}')
             logger.info(f'Finished scraping page {page_number}/{self.last_page}')
             try:
-                collection.insert_many(catalog_page_talks_info)
+                # ordered=False, so other non-duplicate documents can be inserted
+                collection.insert_many(catalog_page_talks_info, ordered=False)
             except Exception as ex:
                 logger.error(ex)
         print('Finished scraping! :)')
