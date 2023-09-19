@@ -69,25 +69,26 @@ class WebScrappy:
         return catalog_page
 
     @staticmethod
-    def get_talk_page(talk_page_url):
+    def get_talk_page(url):
         """
         Get talk's data and page html content
 
-        :param talk_page_url: url of a talk's page
+        :param url: url of a talk's page
         :return: Return talk data and page html content
         """
-        time.sleep(random.randint(10, 20))
+        time.sleep(random.randint(15, 20))
 
         HEADERS['User-Agent'] = ua.random
-        response = requests.get(talk_page_url, headers=HEADERS)
+        response = requests.get(url, headers=HEADERS)
 
         if response.status_code != 200:
-            logger.error(response.content)
-        # parse page section containing almost all talk data
-        talk_page_data = BeautifulSoup(response.content, 'lxml', parse_only=talk_data_parse_only)
-        # parse talk's page content
-        talk_page_content = BeautifulSoup(response.content, 'lxml', parse_only=talk_page_parse_only)
-        return talk_page_data, talk_page_content
+            logger.error(f'Scraping talk page {url} resulted in {response.status_code} code')
+            logger.error(f'Printing page content: {response.content}')
+
+        filename = url.split('/')[-1]
+        save_html_to_file(response.content, os.path.join('scraped_talk_pages', filename, '.html'))
+
+        return response.content
 
     @staticmethod
     def parse_talk_transcript(transcript_data):
@@ -113,15 +114,19 @@ class WebScrappy:
         return transcript
 
     @staticmethod
-    def parse_talk_page_info(talk_page_data, talk_page_content):
+    def parse_talk_page_info(page_content):
         """
-        Get all information about a talk from its data and html content
+        Get all information about a talk from its html content
 
-        :param talk_page_data: talk data
-        :param talk_page_content: talk page html content
+        :param page_content: talk page html content
         :return: Talk information from its page on TED
         :rtype: dict
         """
+        # parse page section containing almost all talk data
+        talk_page_data = BeautifulSoup(page_content, 'lxml', parse_only=talk_data_parse_only)
+        # parse talk's page content
+        talk_page_content = BeautifulSoup(page_content, 'lxml', parse_only=talk_page_parse_only)
+
         talk_page_data = json.loads(talk_page_data.script.get_text())
         page_right_side = talk_page_content.find('aside')
 
@@ -179,14 +184,12 @@ class WebScrappy:
             talk_image, talk_info = div.find_all(recursive=False)
 
             # get url of a TED talk page
-            talk_page_url = ''.join([TED_URL, talk_image.a['href']])
+            url = TED_URL + talk_image.a['href']
+            page_content = WebScrappy.get_talk_page(url)
 
-            talk_page_data, talk_page_content = WebScrappy.get_talk_page(talk_page_url)
+            talk_page_info = WebScrappy.parse_talk_page_info(page_content)
 
-            talk_page_info = WebScrappy.parse_talk_page_info(talk_page_data, talk_page_content)
-
-            data.append({**talk_page_info,
-                         'page_url': talk_page_url})
+            data.append({**talk_page_info, 'page_url': url})
             logger.debug(f'Finished scraping talk - {talk_page_info.get("title")}')
 
         return data
