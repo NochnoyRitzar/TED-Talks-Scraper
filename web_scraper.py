@@ -1,35 +1,29 @@
+import os
 import random
 import time
 import requests
 import json
 # import library for faster scraping
 import cchardet
+
+from fake_useragent import UserAgent
 from bs4 import BeautifulSoup, SoupStrainer
-from urllib.parse import urlencode
-from pandas import read_csv
-from constants import TED_URL, HEADERS, GRAPHQL_SHA_HASH
-from db_connect import client
-from utilities import create_logger, find_last_scraped_catalog_page
+from constants import TED_URL, HEADERS
+from utilities import create_logger, find_last_scraped_catalog_page, save_html_to_file
 
 # speed up program by filtering what to parse
 catalog_parse_only = SoupStrainer('div', id='browse-results')
 talk_page_parse_only = SoupStrainer('main', id='maincontent')
 talk_data_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
-
 last_scraped_page = find_last_scraped_catalog_page()
-# connect to 'talks_info' collection in 'TEDTalks' db
-collection = client['TEDTalks']['talks_info']
-session = requests.Session()
-session.headers.update(HEADERS)
 logger = create_logger()
-ua_list = read_csv('https://raw.githubusercontent.com/yusuzech/top-50-user-agents/master/user_agent.csv')
+ua = UserAgent()
 
 
 class WebScrappy:
 
     def __init__(self):
         self.last_page = WebScrappy.get_pages_count()
-
         self.start_scraping()
 
     @staticmethod
@@ -41,9 +35,11 @@ class WebScrappy:
         :rtype: int
         """
 
-        response = requests.get(TED_URL + '/talks')
+        response = requests.get(TED_URL + '/talks', headers=HEADERS)
         if response.status_code != 200:
-            logger.error(response.content)
+            logger.error(f'Scraping pagination number resulted in {response.status_code} code')
+            logger.error(f'Printing page content: {response.content}')
+
         catalog_page = BeautifulSoup(response.content, 'lxml', parse_only=catalog_parse_only)
 
         gap_span = catalog_page.find('span', class_='pagination__item pagination__gap')
@@ -52,44 +48,25 @@ class WebScrappy:
 
     @staticmethod
     def get_catalog_page(page_number):
+        """
+
+        :param page_number: catalog page number
+        :return:
+        """
         time.sleep(random.randint(10, 20))
-        url = TED_URL + f'/talks?page={page_number}&sort=oldest'
-        session.headers.update({'Referer': url})
-        response = session.get(url)
+
+        HEADERS['User-Agent'] = ua.random
+        url = f'{TED_URL}/talks?page={page_number}?sort=oldest'
+
+        response = requests.get(url, headers=HEADERS)
         if response.status_code != 200:
-            logger.error(response.content)
+            logger.error(f'Scraping catalog page {page_number} resulted in {response.status_code} code')
+            logger.error(f'Printing page content: {response.content}')
+
+        save_html_to_file(response.content, os.path.join('scraped_catalog_pages', f'catalog_page_{page_number}'))
         catalog_page = BeautifulSoup(response.content, 'lxml', parse_only=catalog_parse_only)
 
         return catalog_page
-
-    @staticmethod
-    def scrape_catalog_page_info(catalog_page):
-        """
-        Scrape talks page url from catalog page
-
-        :return: Return list of talks with their info
-        :rtype: list
-        """
-        data = []
-
-        # find all talks divs
-        talk_divs = catalog_page.find_all('div', class_='media media--sm-v')
-        for div in talk_divs:
-            # get direct children
-            talk_image, talk_info = div.find_all(recursive=False)
-
-            # get url of a TED talk page
-            talk_page_url = ''.join([TED_URL, talk_image.a['href']])
-
-            talk_page_data, talk_page_content = WebScrappy.get_talk_page(talk_page_url)
-
-            talk_page_info = WebScrappy.scrape_talk_page_info(talk_page_data, talk_page_content)
-
-            data.append({**talk_page_info,
-                         'page_url': talk_page_url})
-            logger.info(f'Finished scraping talk - {talk_page_info.get("title")}')
-
-        return data
 
     @staticmethod
     def get_talk_page(talk_page_url):
@@ -100,7 +77,10 @@ class WebScrappy:
         :return: Return talk data and page html content
         """
         time.sleep(random.randint(10, 20))
-        response = session.get(talk_page_url)
+
+        HEADERS['User-Agent'] = ua.random
+        response = requests.get(talk_page_url, headers=HEADERS)
+
         if response.status_code != 200:
             logger.error(response.content)
         # parse page section containing almost all talk data
@@ -110,15 +90,40 @@ class WebScrappy:
         return talk_page_data, talk_page_content
 
     @staticmethod
+    def parse_talk_transcript(transcript_data):
+        """
+        Join transcript string into a single text
+
+        :param transcript_data: response content containing transcript data
+        :return: transcript of a talk
+        """
+        transcript_data = transcript_data.get('translation')
+        # check if talk has no transcript
+        if not transcript_data:
+            return ''
+        paragraphs_list = transcript_data['paragraphs']
+        text_list = []
+        for paragraph in paragraphs_list:
+            cues = paragraph.get('cues')
+            paragraph_text = [cue.get('text').replace('\n', ' ') for cue in cues]
+            text_list.append(' '.join(paragraph_text))
+
+        transcript = ' '.join(text_list)
+
+        return transcript
+
+    @staticmethod
     def scrape_talk_page_info(talk_page_data, talk_page_content):
         """
-        Get all information about a talk from it's data and html content
+        Get all information about a talk from its data and html content
 
         :param talk_page_data: talk data
         :param talk_page_content: talk page html content
-        :return: Talk information from it's page on TED
+        :return: Talk information from its page on TED
         :rtype: dict
         """
+        talk_data = {}
+
         talk_page_data = json.loads(talk_page_data.script.get_text())
 
         page_right_side = talk_page_content.find('aside')
@@ -127,7 +132,7 @@ class WebScrappy:
 
         youtube_video_code = player_data.get('external', {}).get('code')
         ted_id = video_data['id']
-        talk_url = video_data['slug']
+        # talk_url = video_data['slug']
         title = video_data['title']
         views = video_data['viewedCount']
         duration = video_data['duration']
@@ -157,7 +162,7 @@ class WebScrappy:
             } for language in player_data['languages']
         ]
 
-        transcript_data = WebScrappy.get_transcript_data(talk_url)
+        transcript_data = talk_page_data['props']['pageProps']['transcriptData']
         transcript = WebScrappy.parse_talk_transcript(transcript_data)
 
         return {
@@ -179,77 +184,44 @@ class WebScrappy:
         }
 
     @staticmethod
-    def get_transcript_data(talk_url):
+    def scrape_catalog_page_info(catalog_page):
         """
-        Get transcript data from graphql request
+        Scrape talks page url from catalog page
 
-        :param talk_url: part of talk page url
-        :return: transcript data
+        :return: Return list of talks with their info
+        :rtype: list
         """
-        # query parameters
-        params = {
-            "variables": {
-                "id": talk_url,
-                "language": "en"
-            },
-            "extensions": {
-                "persistedQuery": {
-                    "version": 1,
-                    "sha256Hash": GRAPHQL_SHA_HASH
-                }
-            }
-        }
+        data = []
 
-        url = ''.join([TED_URL,
-                       '/graphql?operationName=Transcript&',
-                       urlencode(params).replace('+', '').replace('%27', '%22')])
-        time.sleep(random.randint(10, 20))
-        response = session.get(url)
-        if response.status_code != 200:
-            logger.error(response.content)
+        # find all talks divs
+        talk_divs = catalog_page.find_all('div', class_='media media--sm-v')
+        for div in talk_divs:
+            # get direct children
+            talk_image, talk_info = div.find_all(recursive=False)
 
-        return json.loads(response.content)
+            # get url of a TED talk page
+            talk_page_url = ''.join([TED_URL, talk_image.a['href']])
 
-    @staticmethod
-    def parse_talk_transcript(transcript_data):
-        """
-        Join transcript string into a single text
+            talk_page_data, talk_page_content = WebScrappy.get_talk_page(talk_page_url)
 
-        :param transcript_data: response content containing transcript data
-        :return: transcript of a talk
-        """
-        transcript_data = transcript_data['data'].get('translation')
-        # check if talk has no transcript
-        if not transcript_data:
-            return ''
-        paragraphs_list = transcript_data['paragraphs']
-        text_list = []
-        for paragraph in paragraphs_list:
-            cues = paragraph.get('cues')
-            paragraph_text = [cue.get('text').replace('\n', ' ') for cue in cues]
-            text_list.append(' '.join(paragraph_text))
+            talk_page_info = WebScrappy.scrape_talk_page_info(talk_page_data, talk_page_content)
 
-        transcript = ' '.join(text_list)
+            data.append({**talk_page_info,
+                         'page_url': talk_page_url})
+            logger.debug(f'Finished scraping talk - {talk_page_info.get("title")}')
 
-        return transcript
+        return data
 
     def start_scraping(self):
         print('Starting to web scrape')
         # iterate over all catalog pages
-        for page_number in range(last_scraped_page + 1, self.last_page + 1):
-            # get random user-agent from list and update headers
-            headers = {'User-Agent': ua_list['User agent'].sample(1).iloc[0]}
-            session.headers.update(headers)
-
+        for page_number in range(1, self.last_page + 1):
             catalog_page = WebScrappy.get_catalog_page(page_number)
+
             catalog_page_talks_info = self.scrape_catalog_page_info(catalog_page)
-            print(f'Finished scraping page {page_number}/{self.last_page}')
-            logger.info(f'Finished scraping page {page_number}/{self.last_page}')
-            try:
-                # ordered=False, so other non-duplicate documents can be inserted
-                collection.insert_many(catalog_page_talks_info, ordered=False)
-            except Exception as ex:
-                logger.error(ex)
+
+            logger.debug(f'Finished scraping page {page_number}/{self.last_page}')
+
         print('Finished scraping! :)')
 
 

@@ -1,13 +1,13 @@
-import logging
 import os
 import re
+import logging
 
 from constants import LOG_FILE_NAME
 
 
 def create_logger():
     logger = logging.getLogger('WebScrappy')
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     log_format = logging.Formatter('%(levelname)s: %(asctime)s - %(message)s')
     handler = logging.FileHandler(filename=LOG_FILE_NAME, encoding='utf-8', mode='w')
     handler.setFormatter(log_format)
@@ -37,3 +37,14 @@ def find_last_scraped_catalog_page():
                 return 1
     else:
         return 1
+
+
+def save_html_to_file(html_content, save_path):
+    """
+
+    :param html_content:
+    :param save_path:
+    :return:
+    """
+    with open(os.path.join('data', save_path), 'wb') as f:
+        f.write(html_content)
