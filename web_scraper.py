@@ -113,7 +113,7 @@ class WebScrappy:
         return transcript
 
     @staticmethod
-    def scrape_talk_page_info(talk_page_data, talk_page_content):
+    def parse_talk_page_info(talk_page_data, talk_page_content):
         """
         Get all information about a talk from its data and html content
 
@@ -122,66 +122,45 @@ class WebScrappy:
         :return: Talk information from its page on TED
         :rtype: dict
         """
-        talk_data = {}
-
         talk_page_data = json.loads(talk_page_data.script.get_text())
-
         page_right_side = talk_page_content.find('aside')
+
         video_data = talk_page_data['props']['pageProps']['videoData']
         player_data = json.loads(video_data['playerData'])
 
-        youtube_video_code = player_data.get('external', {}).get('code')
-        ted_id = video_data['id']
-        # talk_url = video_data['slug']
-        title = video_data['title']
-        views = video_data['viewedCount']
-        duration = video_data['duration']
-        recorded_date = video_data['recordedOn']
-        published_date = video_data['publishedAt']
-        summary = video_data['description']
         event = player_data['event']
-        likes = page_right_side.find_previous_sibling('div').select_one('i.icon-heart + span').get_text()[2:-1]
 
-        topics_list = [
-            {'id': topic['id'], 'name': topic['name']} for topic in video_data['topics']['nodes']
-        ]
-
-        related_videos_list = [video['id'] for video in video_data['relatedVideos']]
-
-        speakers_list = [
-            {
-                'name': ' '.join([speaker['firstname'], speaker['lastname']]).strip(),
-                'occupation': 'Educator' if event == 'TED-Ed' else speaker['description']
-            } for speaker in video_data['speakers']['nodes']
-        ]
-
-        languages_list = [
-            {
-                'name': language['languageName'],
-                'code': language['languageCode']
-            } for language in player_data['languages']
-        ]
-
-        transcript_data = talk_page_data['props']['pageProps']['transcriptData']
-        transcript = WebScrappy.parse_talk_transcript(transcript_data)
-
-        return {
-            '_id': ted_id,
-            'title': title,
-            'duration': duration,
-            'views': views,
-            'likes': likes,
-            'summary': summary,
+        talk_data = {
+            '_id': video_data['id'],
+            'title': video_data['title'],
+            'duration': video_data['duration'],
+            'views': video_data['viewedCount'],
+            'likes': page_right_side.find_previous_sibling('div').select_one('i.icon-heart + span').get_text()[2:-1],
+            'summary': video_data['description'],
             'event': event,
-            'recorded_date': recorded_date,
-            'published_date': published_date,
-            'topics': topics_list,
-            'speakers': speakers_list,
-            'subtitle_languages': languages_list,
-            'youtube_video_code': youtube_video_code,
-            'related_videos': related_videos_list,
-            'transcript': transcript
+            'recorded_date': video_data['recordedOn'],
+            'published_date': video_data['publishedAt'],
+            'topics': [
+                {'id': topic['id'], 'name': topic['name']} for topic in video_data['topics']['nodes']
+            ],
+            'speakers': [
+                {
+                    'name': ' '.join([speaker['firstname'], speaker['lastname']]).strip(),
+                    'occupation': 'Educator' if event == 'TED-Ed' else speaker['description']
+                } for speaker in video_data['speakers']['nodes']
+            ],
+            'subtitle_languages': [
+                {
+                    'name': language['languageName'],
+                    'code': language['languageCode']
+                } for language in player_data['languages']
+            ],
+            'youtube_video_code': player_data.get('external', {}).get('code'),
+            'related_videos': [video['id'] for video in video_data['relatedVideos']],
+            'transcript': WebScrappy.parse_talk_transcript(talk_page_data['props']['pageProps']['transcriptData'])
         }
+
+        return talk_data
 
     @staticmethod
     def scrape_catalog_page_info(catalog_page):
@@ -204,7 +183,7 @@ class WebScrappy:
 
             talk_page_data, talk_page_content = WebScrappy.get_talk_page(talk_page_url)
 
-            talk_page_info = WebScrappy.scrape_talk_page_info(talk_page_data, talk_page_content)
+            talk_page_info = WebScrappy.parse_talk_page_info(talk_page_data, talk_page_content)
 
             data.append({**talk_page_info,
                          'page_url': talk_page_url})
