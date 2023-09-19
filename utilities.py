@@ -46,5 +46,5 @@ def save_html_to_file(html_content, save_path):
     :param save_path:
     :return:
     """
-    with open(os.path.join('data', save_path), 'wb') as f:
+    with open(save_path, 'wb') as f:
         f.write(html_content)

@@ -1,3 +1,5 @@
+import os
+
 TED_URL = 'https://www.ted.com'
 
 HEADERS = {
@@ -9,3 +11,6 @@ HEADERS = {
 }
 
 LOG_FILE_NAME = 'scraping.log'
+
+SCRAPED_CATALOG_PAGES_PATH = os.path.join('data', 'scraped_catalog_pages')
+SCRAPED_TALK_PAGES_PATH = os.path.join('data', 'scraped_talk_pages')

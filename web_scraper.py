@@ -8,14 +8,13 @@ import cchardet
 
 from fake_useragent import UserAgent
 from bs4 import BeautifulSoup, SoupStrainer
-from constants import TED_URL, HEADERS
-from utilities import create_logger, find_last_scraped_catalog_page, save_html_to_file
+from constants import TED_URL, HEADERS, SCRAPED_TALK_PAGES_PATH, SCRAPED_CATALOG_PAGES_PATH
+from utilities import create_logger, save_html_to_file
 
 # speed up program by filtering what to parse
 catalog_parse_only = SoupStrainer('div', id='browse-results')
 talk_page_parse_only = SoupStrainer('main', id='maincontent')
 talk_data_parse_only = SoupStrainer('script', id='__NEXT_DATA__')
-last_scraped_page = find_last_scraped_catalog_page()
 logger = create_logger()
 ua = UserAgent()
 
@@ -63,7 +62,10 @@ class WebScrappy:
             logger.error(f'Scraping catalog page {page_number} resulted in {response.status_code} code')
             logger.error(f'Printing page content: {response.content}')
 
-        save_html_to_file(response.content, os.path.join('scraped_catalog_pages', f'catalog_page_{page_number}'))
+        save_html_to_file(
+            response.content,
+            os.path.join(SCRAPED_CATALOG_PAGES_PATH, f'catalog_page_{page_number}.html')
+        )
         catalog_page = BeautifulSoup(response.content, 'lxml', parse_only=catalog_parse_only)
 
         return catalog_page
@@ -86,7 +88,7 @@ class WebScrappy:
             logger.error(f'Printing page content: {response.content}')
 
         filename = url.split('/')[-1]
-        save_html_to_file(response.content, os.path.join('scraped_talk_pages', filename, '.html'))
+        save_html_to_file(response.content, os.path.join(SCRAPED_TALK_PAGES_PATH, filename, '.html'))
 
         return response.content
 
@@ -181,7 +183,12 @@ class WebScrappy:
         talk_divs = catalog_page.find_all('div', class_='media media--sm-v')
         for div in talk_divs:
             # get direct children
-            talk_image, talk_info = div.find_all(recursive=False)
+            talk_image, _ = div.find_all(recursive=False)
+
+            filename = talk_image.a['href'].split('/')[-1]
+            file_path = os.path.join(SCRAPED_TALK_PAGES_PATH, filename, '.html')
+            if os.path.exists(file_path):
+                continue
 
             # get url of a TED talk page
             url = TED_URL + talk_image.a['href']
@@ -198,9 +205,15 @@ class WebScrappy:
         print('Starting to web scrape')
         # iterate over all catalog pages
         for page_number in range(1, self.last_page + 1):
-            catalog_page = WebScrappy.get_catalog_page(page_number)
+            file_path = os.path.join(SCRAPED_CATALOG_PAGES_PATH, f'catalog_page_{page_number}.html')
+            # check if catalog page has been scraped
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as f:
+                    catalog_page = f.read()
+            else:
+                catalog_page = WebScrappy.get_catalog_page(page_number)
 
-            catalog_page_talks_info = self.scrape_catalog_page_info(catalog_page)
+            catalog_page_talks_info = WebScrappy.scrape_catalog_page_info(catalog_page)
 
             logger.debug(f'Finished scraping page {page_number}/{self.last_page}')
 
@@ -208,5 +221,8 @@ class WebScrappy:
 
 
 if __name__ == '__main__':
+    # create folder for storing intermediate scraping data
+    os.makedirs(os.path.join('data', 'scraped_catalog_pages'), exist_ok=True)
+    os.makedirs(os.path.join('data', 'scraped_talk_pages'), exist_ok=True)
     # start web scraping
     scrappy = WebScrappy()
